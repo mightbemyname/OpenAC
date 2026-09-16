@@ -182,6 +182,40 @@ public class RetailChaseCameraTests
     }
 
     [Fact]
+    public void DirectOrbit_ImmediatelyUsesCharacterPivotAndAbsoluteViewHeading()
+    {
+        var camera = new RetailChaseCamera
+        {
+            Distance = 5f,
+            Pitch = 0.25f,
+            YawOffset = 0.4f,
+        };
+        var position = new Vector3(10f, 20f, 3f);
+
+        camera.Update(position, 0f, Vector3.Zero, true, Vector3.UnitZ,
+            1f / 60f, directOrbit: true);
+        var pivot = position + new Vector3(0f, 0f, camera.PivotHeight);
+        var first = RetailChaseCamera.ComputeDesiredPose(
+            pivot,
+            new Vector3(MathF.Cos(0.4f), MathF.Sin(0.4f), 0f),
+            camera.Distance, camera.Pitch, 0f);
+        Assert.Equal(first.eye.X, camera.Position.X, 5);
+        Assert.Equal(first.eye.Y, camera.Position.Y, 5);
+        Assert.Equal(first.eye.Z, camera.Position.Z, 5);
+
+        camera.YawOffset = -0.4f;
+        camera.Update(position, 0f, Vector3.Zero, true, Vector3.UnitZ,
+            1f / 60f, directOrbit: true);
+        var second = RetailChaseCamera.ComputeDesiredPose(
+            pivot,
+            new Vector3(MathF.Cos(-0.4f), MathF.Sin(-0.4f), 0f),
+            camera.Distance, camera.Pitch, 0f);
+        Assert.Equal(second.eye.X, camera.Position.X, 5);
+        Assert.Equal(second.eye.Y, camera.Position.Y, 5);
+        Assert.Equal(second.eye.Z, camera.Position.Z, 5);
+    }
+
+    [Fact]
     public void DesiredPose_TrackedHeadingRetainsViewerOffsetOrbitAndLooksAtPivot()
     {
         var pivot = new Vector3(10f, 20f, 1.5f);

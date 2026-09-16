@@ -88,15 +88,20 @@ public sealed class RetailChaseCamera : ICamera
         float dt,
         uint cellId = 0,
         uint selfEntityId = 0,
-        Vector3? trackedTargetPoint = null)
+        Vector3? trackedTargetPoint = null,
+        bool directOrbit = false)
     {
         // 1. Push velocity into 5-frame ring, get average.
         PushVelocity(_velocityRing, ref _velocityCount, playerVelocity);
         Vector3 avgVel = AverageVelocity(_velocityRing, _velocityCount);
 
         Vector3 pivotWorld = playerPosition + new Vector3(0f, 0f, PivotHeight);
-        Vector3? trackedHeading = ComputeTrackedHeading(pivotWorld, trackedTargetPoint);
-        Vector3 heading = trackedHeading
+        Vector3? trackedHeading = directOrbit
+            ? null : ComputeTrackedHeading(pivotWorld, trackedTargetPoint);
+        Vector3 heading = directOrbit
+            ? new Vector3(MathF.Cos(playerYaw + YawOffset),
+                MathF.Sin(playerYaw + YawOffset), 0f)
+            : trackedHeading
             ?? ComputeHeading(
                 avgVel,
                 playerYaw + YawOffset,
@@ -113,7 +118,7 @@ public sealed class RetailChaseCamera : ICamera
             : ComputeDesiredPose(
                 pivotWorld, heading, Distance, Pitch, viewerYawOffset);
 
-        if (!_initialised)
+        if (directOrbit || !_initialised)
         {
             _soughtEye     = targetEye;
             _publishedEye  = targetEye;
@@ -146,6 +151,13 @@ public sealed class RetailChaseCamera : ICamera
             }
         }
         _publishedEye = publishedEye;
+
+        if (directOrbit && !_inHead && _targetDirectionLocal is null)
+        {
+            Vector3 toPivot = pivotWorld - publishedEye;
+            if (toPivot.LengthSquared() > 0.000001f)
+                _dampedForward = Vector3.Normalize(toPivot);
+        }
 
         Position = publishedEye;
         View     = Matrix4x4.CreateLookAt(publishedEye, publishedEye + _dampedForward, new Vector3(0f, 0f, 1f));

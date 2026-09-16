@@ -316,6 +316,7 @@ public sealed class PlayerMovementController
     private bool _hasInputSnapshot;
 
     private bool _mouseLookActive;
+    private bool _modernMouseLook;
     private bool _mouseTurnSamplePending;
     private float _mouseTurnAdjustment;
     private uint? _activeInputTurnCommand;
@@ -680,13 +681,14 @@ public sealed class PlayerMovementController
         _body.TransientState &= ~TransientStateFlags.Active;
     }
 
-    public bool BeginMouseLook(MovementInput input)
+    public bool BeginMouseLook(MovementInput input, bool modern = false)
     {
         EnsurePublishedForRuntimeOperation();
         if (_mouseLookActive || State != PlayerState.InWorld)
             return false;
 
         _mouseLookActive = true;
+        _modernMouseLook = modern;
         TakeControlFromServer(input);
         _mouseTurnSamplePending = false;
         _mouseTurnAdjustment = 0f;
@@ -736,6 +738,7 @@ public sealed class PlayerMovementController
             return false;
 
         _mouseLookActive = false;
+        _modernMouseLook = false;
         TakeControlFromServer(input);
         _mouseTurnSamplePending = false;
         _mouseTurnAdjustment = 0f;
@@ -746,10 +749,10 @@ public sealed class PlayerMovementController
 
     private void ApplyMouseLookToggleMovement(MovementInput input, bool entering)
     {
-        (uint? sidestep, bool useRunHold) = DesiredInputSidestep(input, entering);
+        (uint? sidestep, bool useRunHold) = DesiredInputSidestep(input, entering && !_modernMouseLook);
         ApplyInputSidestep(sidestep, useRunHold, reapply: !entering);
 
-        uint? turn = entering
+        uint? turn = entering && !_modernMouseLook
             ? null
             : input.TurnRight
                 ? MotionCommand.TurnRight
@@ -1342,6 +1345,7 @@ public sealed class PlayerMovementController
         _activeInputSidestepCommand = null;
         _activeInputSidestepUsesRunHold = false;
         _mouseLookActive = false;
+        _modernMouseLook = false;
         _mouseTurnSamplePending = false;
         _mouseTurnAdjustment = 0f;
         _mouseMovementEventCandidate = false;
@@ -1396,6 +1400,7 @@ public sealed class PlayerMovementController
         _activeInputSidestepCommand = null;
         _activeInputSidestepUsesRunHold = false;
         _mouseLookActive = false;
+        _modernMouseLook = false;
         _mouseTurnSamplePending = false;
         _mouseTurnAdjustment = 0f;
         _mouseMovementEventCandidate = false;
@@ -1639,7 +1644,7 @@ public sealed class PlayerMovementController
             { StopMotionAtPhysicsObjectBoundary(MotionCommand.WalkBackward, p); motionEdgeFired = true; }
 
             (uint? desiredSidestep, bool sidestepUsesRunHold) =
-                DesiredInputSidestep(input, _mouseLookActive);
+                DesiredInputSidestep(input, _mouseLookActive && !_modernMouseLook);
             if (ApplyInputSidestep(desiredSidestep, sidestepUsesRunHold))
                 motionEdgeFired = true;
 
@@ -1650,7 +1655,9 @@ public sealed class PlayerMovementController
             if (keyboardTurnEdge)
                 movementEventRequested = true;
 
-            uint? desiredTurnCommand = _mouseLookActive
+            bool keyboardOwnsTurn = input.TurnLeft != input.TurnRight;
+            uint? desiredTurnCommand = (_mouseLookActive && !_modernMouseLook)
+                || (_mouseLookActive && _modernMouseLook && !keyboardOwnsTurn)
                 ? null
                 : input.TurnRight
                     ? MotionCommand.TurnRight
@@ -1660,7 +1667,8 @@ public sealed class PlayerMovementController
             float desiredTurnSpeed = 1f;
             bool desiredTurnFromMouse = false;
 
-            if (_mouseLookActive && _mouseTurnSamplePending)
+            if (_mouseLookActive && _mouseTurnSamplePending
+                && (!_modernMouseLook || !keyboardOwnsTurn))
             {
                 float adjustment = _mouseTurnAdjustment;
                 _mouseTurnSamplePending = false;
@@ -1677,7 +1685,8 @@ public sealed class PlayerMovementController
                     desiredTurnFromMouse = true;
                 }
             }
-            else if (_mouseLookActive && _activeInputTurnFromMouse)
+            else if (_mouseLookActive && _activeInputTurnFromMouse
+                && (!_modernMouseLook || !keyboardOwnsTurn))
             {
                 desiredTurnCommand = _activeInputTurnCommand;
                 desiredTurnSpeed = _activeInputTurnSpeed;
